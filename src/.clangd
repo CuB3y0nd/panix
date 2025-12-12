@@ -1,0 +1,9 @@
+CompileFlags:
+  Add:
+    - -I../linux-6.12.61/include
+    - -I../linux-6.12.61/arch/x86/include
+    - -I../linux-6.12.61/arch/x86/include/generated
+    - -I../linux-6.12.61/include/generated
+    - -D__KERNEL__
+    - -DMODULE
+    - -Wno-unused-command-line-argument
