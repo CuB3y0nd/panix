@@ -20,7 +20,19 @@ static int device_release(struct inode *inode, struct file *filp) {
 static ssize_t device_read(struct file *filp, char *buffer, size_t length,
                            loff_t *offset) {
   char *msg = "Hello panix!\n";
-  return copy_to_user(buffer, msg, strlen(msg)) ? -EFAULT : 0;
+  size_t msg_len = strlen(msg);
+
+  if (*offset != 0)
+    return 0;
+
+  if (length < msg_len)
+    return -EINVAL;
+
+  if (copy_to_user(buffer, msg, msg_len))
+    return -EFAULT;
+
+  *offset = msg_len;
+  return msg_len;
 }
 
 static ssize_t device_write(struct file *filp, const char *buf, size_t len,
