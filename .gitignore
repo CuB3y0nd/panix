@@ -1,6 +1,5 @@
 linux-*
 busybox-*
-initramfs.cpio.gz
 .config
 .gdb_history
 *.o
@@ -18,3 +17,5 @@ fs/bin
 fs/linuxrc
 fs/sbin
 fs/usr
+.tar.gz
+.gz
