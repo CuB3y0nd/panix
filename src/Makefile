@@ -1,4 +1,4 @@
-KERNEL_VERSION=6.12.61
+KERNEL_VERSION=5.4
 
 # add your own modules here!
 obj-m = example.o
