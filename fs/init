@@ -2,7 +2,7 @@
 
 mount -t proc none /proc
 mount -t sysfs none /sys
-mount -t 9p -o trans=virtio,version=9p2000.L,nosuid hostshare /home/panix
+mount -t 9p -o trans=virtio,version=9p2000.L,nosuid,msize=65536 hostshare /home/panix
 #for f in $(ls *.ko); do
 #    insmod $f
 #done
