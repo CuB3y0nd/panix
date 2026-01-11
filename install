@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+KERNEL_VERSION="5.4"
+BUSYBOX_VERSION="1.36.1"
+DOWNLOAD_DIR="./downloads"
+
+# proxy (off/on)
+export http_proxy="http://127.0.0.1:7897"
+export https_proxy="http://127.0.0.1:7897"
+
+echo "[*] Preparing environment..."
+mkdir -p "$DOWNLOAD_DIR"
+
+download_file() {
+  local url=$1
+  local file=$2
+  local target="$DOWNLOAD_DIR/$file"
+
+  if [ -f "$target" ]; then
+    echo "[*] Found $file, skipping download."
+  else
+    echo "[+] Downloading $file..."
+    if ! curl -L -C - "$url" -o "$target" --fail; then
+      echo "[-] Failed to download $file. Check network/proxy."
+      exit 1
+    fi
+  fi
+}
+
+# --- Download file to ./downloads ---
+echo "[*] Checking source files in $DOWNLOAD_DIR..."
+download_file "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-$KERNEL_VERSION.tar.xz" "linux-$KERNEL_VERSION.tar.xz"
+download_file "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-$KERNEL_VERSION.tar.sign" "linux-$KERNEL_VERSION.tar.sign"
+download_file "https://busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2" "busybox-$BUSYBOX_VERSION.tar.bz2"
+
+echo "[*] Starting Docker build..."
+# Use DOCKER_BUILDKIT=1
+DOCKER_BUILDKIT=1 docker build \
+  --build-arg KERNEL_VERSION_ARG="$KERNEL_VERSION" \
+  --build-arg BUSYBOX_VERSION_ARG="$BUSYBOX_VERSION" \
+  --build-arg http_proxy="$http_proxy" \
+  --build-arg https_proxy="$https_proxy" \
+  . --output type=local,dest=. 2>&1 | tee build.log

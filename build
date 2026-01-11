@@ -11,71 +11,67 @@ KERNEL_MAJOR_VERSION="${KERNEL_VERSION%%.*}"
 KERNEL_MIRROR=https://cdn.kernel.org/pub/linux/kernel/v${KERNEL_MAJOR_VERSION}.x
 BUSYBOX_MIRROR=https://busybox.net/downloads
 DIR=linux-$KERNEL_VERSION
+KERNEL_SOURCE=./downloads/linux-$KERNEL_VERSION.tar.xz
+BUSYBOX_SOURCE=./downloads/busybox-$BUSYBOX_VERSION.tar.bz2
 
 import_gpg_keys() {
   echo "[*] Importing + trusting kernel maintainers' GPG keys..."
-  gpg2 --locate-keys torvalds@kernel.org gregkh@kernel.org
 
-  LINUS_KEY=$(gpg2 --list-keys --with-colons torvalds@kernel.org | awk -F: '/^fpr:/ {print $10; exit}')
-  GREGKH_KEY=$(gpg2 --list-keys --with-colons gregkh@kernel.org | awk -F: '/^fpr:/ {print $10; exit}')
+  local GREG_FPR="647F28654894E3BD457199BE38DBBDC86092693E"
+  local servers=("hkp://keyserver.ubuntu.com" "hkp://pgp.mit.edu" "hkp://keys.gnupg.net")
+  local success=false
 
-  gpg2 --tofu-policy good "$LINUS_KEY"
-  gpg2 --tofu-policy good "$GREGKH_KEY"
-}
+  for server in "${servers[@]}"; do
+    echo "[?] Trying keyserver: $server"
+    if gpg2 --keyserver "$server" --recv-keys "$GREG_FPR"; then
+      success=true
+      break
+    fi
+  done
 
-fetch() {
-  local base="$1"
-  local file="$2"
-  local url="$base/$file"
+  if [ "$success" = false ]; then
+    echo "[-] Critical: Failed to import keys from all keyservers."
+    echo "[!] Try running with --network=host and verified proxy settings."
+    exit 1
+  fi
 
-  echo "[*] Fetching $file"
-  tmp="$file.tmp"
-  curl -fSL --etag-save "$file.etag" --output "$tmp" "$url"
-  mv "$tmp" "$file"
-}
-
-fetch_sources() {
-  fetch "$KERNEL_MIRROR" "$DIR.tar.xz"
-  fetch "$KERNEL_MIRROR" "$DIR.tar.sign"
-
-  echo "[*] Verifying kernel tarball..."
-  xz -cd "$DIR.tar.xz" | gpg2 --trust-model tofu --verify "$DIR.tar.sign" - >/dev/null
-
-  fetch "$BUSYBOX_MIRROR" "busybox-$BUSYBOX_VERSION.tar.bz2"
+  gpg2 --tofu-policy good "$GREG_FPR"
 }
 
 apply_kernel_patches() {
   echo "[+] Applying kernel patches..."
   sed -i 'N;s/WARN("missing symbol table");\n\t\treturn -1;/\n\t\treturn 0;\n\t\t\/\/ A missing symbol table is actually possible if its an empty .o file.  This can happen for thunk_64.o./g' \
-    "$DIR/tools/objtool/elf.c"
+    "$HOME/$DIR/tools/objtool/elf.c"
   sed -i 's/unsigned long __force_order/\/\/ unsigned long __force_order/g' \
-    "$DIR/arch/x86/boot/compressed/pgtable_64.c"
+    "$HOME/$DIR/arch/x86/boot/compressed/pgtable_64.c"
 }
 
 apply_busybox_patches() {
   echo "[+] Applying busybox patches..."
   sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/g' \
-    "busybox-$BUSYBOX_VERSION/.config"
+    "$HOME/busybox-$BUSYBOX_VERSION/.config"
 }
 
 extract_sources() {
-  if [ ! -d "$DIR" ]; then
+  if [ -f "$KERNEL_SOURCE" ]; then
     echo "[*] Extracting kernel..."
-    tar xf "$DIR.tar.xz"
+    mkdir -p "$HOME/$DIR"
+    tar xf "$KERNEL_SOURCE" -C "$HOME/$DIR" --strip-components=1
     apply_kernel_patches
   fi
 
-  if [ ! -d "busybox-$BUSYBOX_VERSION" ]; then
+  if [ -f "$BUSYBOX_SOURCE" ]; then
     echo "[*] Extracting busybox..."
-    tar xjf "busybox-$BUSYBOX_VERSION.tar.bz2"
+    mkdir -p "$HOME/busybox-$BUSYBOX_VERSION"
+    tar xjf "$BUSYBOX_SOURCE" -C "$HOME/busybox-$BUSYBOX_VERSION" --strip-components=1
   fi
 }
 
 build_kernel() {
   echo "[*] Generating defconfig..."
-  make -C "$DIR" defconfig
+  make -C "$HOME/$DIR" defconfig
 
-  cat >>"$DIR/.config" <<EOF
+  cat >>"$HOME/$DIR/.config" <<EOF
 CONFIG_NET_9P=y
 CONFIG_NET_9P_DEBUG=n
 CONFIG_9P_FS=y
@@ -110,35 +106,32 @@ CONFIG_DEBUG_INFO_COMPRESSED_ZSTD=n
 EOF
 
   echo "[*] Finalizing config with olddefconfig..."
-  make -C "$DIR" olddefconfig
+  make -C "$HOME/$DIR" olddefconfig
 
   echo "[*] Building kernel..."
-  make -C "$DIR" -j"$(nproc)" bzImage
+  make -C "$HOME/$DIR" -j"$(nproc)" bzImage
 }
 
 build_busybox() {
   echo "[*] Generating defconfig..."
-  make -C "busybox-$BUSYBOX_VERSION" defconfig
+  make -C "$HOME/busybox-$BUSYBOX_VERSION" defconfig
 
   apply_busybox_patches
 
   echo "[*] Building busybox..."
-  make -C "busybox-$BUSYBOX_VERSION" -j"$(nproc)"
-  make -C "busybox-$BUSYBOX_VERSION" install
+  make -C "$HOME/busybox-$BUSYBOX_VERSION" -j"$(nproc)"
+  make -C "$HOME/busybox-$BUSYBOX_VERSION" install
 }
 
 build_filesystem() {
   echo "[*] Building filesystem..."
   mkdir -pv fs/{bin,sbin,etc,proc,sys,usr/bin,usr/sbin,root,home/panix}
-  cp -a "busybox-$BUSYBOX_VERSION/_install/"* fs/
+  cp -a "$HOME/busybox-$BUSYBOX_VERSION/_install/"* fs/
 }
 
 case "$1" in
 import_gpg_keys)
   import_gpg_keys
-  ;;
-fetch_sources)
-  fetch_sources
   ;;
 extract_sources)
   extract_sources
@@ -159,7 +152,6 @@ build_all)
   ;;
 *)
   import_gpg_keys
-  fetch_sources
   extract_sources
   build_all
   ;;
