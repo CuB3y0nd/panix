@@ -13,10 +13,8 @@ Docker + Docker BuildKit
 Building the kernel, busybox inside the docker environment:
 
 ```bash
-docker build . --output type=local,dest=. 2>&1 | tee build.log
+./install
 ```
-
-If you're using host proxy, you may need to pass add an extra argument `--network=host`.
 
 By default, it will build `kernel-5.4` and `busybox-1.36.1`, you can change it in Dockerfile or pass as argument like `--build-arg KERNEL_VERSION_ARG=`, and newer kernel version might need newer glibc version, so you should change the ubuntu version which used in `builder` stage.
 
